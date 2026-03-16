@@ -14,17 +14,39 @@ Key responsibilities:
 import argparse
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastmcp import FastMCP
 from netmiko import ConnectHandler
 from netmiko.exceptions import NetmikoAuthenticationException, NetmikoTimeoutException
 
+from .flap_engine import DetectionConfig, EventStore, FlapDetector
 from .inventory import load_inventory
 
 SWITCH_INVENTORY = load_inventory()
 MOCK_MODE = os.getenv("BFD_MOCK_MODE", "0").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _int_env(name: str, default: int) -> int:
+    raw = os.getenv(name, str(default)).strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+_STATE_DB_PATH = os.getenv("BFD_STATE_DB", ".bfd_state.sqlite3").strip() or ".bfd_state.sqlite3"
+_event_store = EventStore(_STATE_DB_PATH)
+_detector = FlapDetector(
+    store=_event_store,
+    config=DetectionConfig(
+        flap_window_seconds=_int_env("BFD_FLAP_WINDOW_SECONDS", 300),
+        flap_threshold=_int_env("BFD_FLAP_THRESHOLD", 3),
+        close_stable_seconds=_int_env("BFD_CLOSE_STABLE_SECONDS", 300),
+    ),
+)
 
 # Initialize the MCP server with diagnostic session instructions for the attached LLM client
 mcp = FastMCP(
@@ -332,6 +354,79 @@ def check_bgp_neighbors(device_name: str) -> dict[str, Any]:
         "problem_peers": flapping,
         "neighbors": neighbors,
         "raw_output": raw,
+    }
+
+
+@mcp.tool
+def analyze_bgp_flaps(device_name: str) -> dict[str, Any]:
+    """
+    MCP Tool: Persist a BGP snapshot and run stateful flap detection.
+
+    This tool upgrades diagnostics from one-off checks to incident lifecycle management
+    by persisting peer snapshots in SQLite and opening/closing incidents automatically.
+    """
+    snapshot = check_bgp_neighbors(device_name)
+    if "error" in snapshot:
+        return {
+            "device": device_name,
+            "error": snapshot["error"],
+            "timestamp": now_iso(),
+        }
+
+    neighbors = snapshot.get("neighbors", [])
+    update = _detector.process_snapshot(device_name=device_name, neighbors=neighbors)
+
+    return {
+        "device": device_name,
+        "db_path": _STATE_DB_PATH,
+        "total_neighbors": len(neighbors),
+        "opened_incidents": update.opened,
+        "closed_incidents": update.closed,
+        "active_incidents": update.active,
+        "timestamp": now_iso(),
+    }
+
+
+@mcp.tool
+def get_incidents(status: str = "all", limit: int = 50) -> dict[str, Any]:
+    """MCP Tool: Read persisted incidents from the local SQLite event store."""
+    normalized = status.strip().lower()
+    if normalized not in {"all", "open", "closed"}:
+        return {
+            "error": "Invalid status. Use one of: all, open, closed",
+            "status": status,
+            "timestamp": now_iso(),
+        }
+
+    incidents = _event_store.get_incidents(status=normalized, limit=limit)
+    return {
+        "status": normalized,
+        "count": len(incidents),
+        "incidents": incidents,
+        "db_path": _STATE_DB_PATH,
+        "timestamp": now_iso(),
+    }
+
+
+@mcp.tool
+def get_peer_flap_stats(device_name: str, window_minutes: int = 60) -> dict[str, Any]:
+    """MCP Tool: Return peer instability stats from persisted snapshots."""
+    if device_name not in SWITCH_INVENTORY:
+        return {
+            "error": f"Unknown device '{device_name}'",
+            "known_devices": sorted(SWITCH_INVENTORY.keys()),
+            "timestamp": now_iso(),
+        }
+
+    effective_minutes = max(1, min(window_minutes, 24 * 60))
+    since = (datetime.now(timezone.utc) - timedelta(minutes=effective_minutes)).isoformat()
+    peers = _event_store.get_peer_stats(device_name=device_name, since_time=since)
+    return {
+        "device": device_name,
+        "window_minutes": effective_minutes,
+        "peers": peers,
+        "db_path": _STATE_DB_PATH,
+        "timestamp": now_iso(),
     }
 
 
