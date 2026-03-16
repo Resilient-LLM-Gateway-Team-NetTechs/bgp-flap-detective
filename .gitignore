@@ -5,3 +5,5 @@ __pycache__/
 .venv/
 .env
 .vscode/*.log
+.history/
+.bfd_state.sqlite3

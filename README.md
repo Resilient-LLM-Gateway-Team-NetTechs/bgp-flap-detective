@@ -24,6 +24,9 @@ BGP Flap Detective structures this diagnosis into a repeatable workflow:
 3. **check_mtu_path** — Test path MTU with progressive ping sizes
 4. **get_syslog_events** — Correlate event timing with BGP notifications and resets
 5. **recommend_fix** — Map findings to safe, validated remediation commands
+6. **analyze_bgp_flaps** — Persist snapshots and automatically open/close flap incidents
+7. **get_incidents** — Query open/closed incident history from SQLite
+8. **get_peer_flap_stats** — Rank unstable peers over a time window
 
 All evidence collection is read-only; recommendations are text-only with safety notes. No config changes are auto-executed.
 
@@ -33,8 +36,33 @@ All evidence collection is read-only; recommendations are text-only with safety 
 - SSH command execution via Netmiko
 - Inventory-driven device access
 - Root-cause based fix recommendation tool
+- Stateful flap detector with incident lifecycle (open/close)
+- SQLite persistence for peer snapshots and incidents
 - Unit tests for parsing and analysis logic
 - VS Code task for quick local testing
+
+## Stateful flap detection
+
+The server now supports persistent incident tracking:
+
+- `analyze_bgp_flaps(device_name="spine-1")`
+   - Stores each peer state snapshot in SQLite
+   - Counts state transitions over a configurable window
+   - Opens incidents when transition threshold is crossed
+   - Closes incidents when the peer remains stable
+
+- `get_incidents(status="open" | "closed" | "all", limit=50)`
+   - Reads persisted incidents with severity, summary, and timestamps
+
+- `get_peer_flap_stats(device_name="spine-1", window_minutes=60)`
+   - Returns transitions/down-sample counts per peer, sorted by instability
+
+Environment variables for detector tuning:
+
+- `BFD_STATE_DB` (default: `.bfd_state.sqlite3`)
+- `BFD_FLAP_WINDOW_SECONDS` (default: `300`)
+- `BFD_FLAP_THRESHOLD` (default: `3`)
+- `BFD_CLOSE_STABLE_SECONDS` (default: `300`)
 
 ## Quick start
 
