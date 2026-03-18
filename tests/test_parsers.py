@@ -1,3 +1,4 @@
+from bgp_flap_detective import server
 from bgp_flap_detective.server import analyze_mtu_results, parse_bgp_summary, parse_interface_output
 
 
@@ -37,3 +38,21 @@ def test_analyze_mtu_results() -> None:
     analyzed = analyze_mtu_results({576: True, 1400: True, 1450: False, 1500: False})
     assert analyzed["effective_path_mtu"] == 1400
     assert analyzed["mtu_problem_detected"] is True
+
+
+def test_mock_command_output_bgp_summary() -> None:
+    output = server._mock_command_output("spine-1", "show bgp ipv4 unicast summary")
+    neighbors, flapping = parse_bgp_summary(output)
+    assert len(neighbors) == 2
+    assert len(flapping) == 1
+
+
+def test_run_mock_investigation_returns_full_bundle(monkeypatch) -> None:
+    monkeypatch.setattr(server, "MOCK_MODE", True)
+    result = server.run_mock_investigation()
+
+    assert result["scenario"] == "mock_bgp_flap_demo"
+    assert result["mock_mode_active"] is True
+    assert result["suggested_root_cause"] in {"mtu_mismatch", "crc_errors", "hold_timer", "route_policy"}
+    assert "steps" in result
+    assert "recommendation" in result["steps"]

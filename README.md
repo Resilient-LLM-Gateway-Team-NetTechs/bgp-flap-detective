@@ -26,6 +26,20 @@ BGP Flap Detective is an MCP server that helps diagnose BGP session flapping in 
 
    PYTHONPATH=src ./.venv/bin/python -m bgp_flap_detective.server --http --host 0.0.0.0 --port 8000
 
+## Test without real network devices
+
+Enable mock mode:
+
+   BFD_MOCK_MODE=1 PYTHONPATH=src ./.venv/bin/python -m bgp_flap_detective.server
+
+In mock mode, the server returns synthetic outputs for BGP summary, interface counters, MTU ping checks, and syslog events.
+
+Use tool:
+
+- run_mock_investigation(device_name="spine-1", interface="Ethernet1/1", peer_ip="192.168.1.21")
+
+This gives you an end-to-end simulated investigation bundle for demo and QA testing.
+
 ## Configure inventory
 
 Edit default inventory in src/bgp_flap_detective/inventory.py or point BFD_INVENTORY_FILE to a JSON inventory file.

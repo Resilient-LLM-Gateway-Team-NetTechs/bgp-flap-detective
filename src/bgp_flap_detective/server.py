@@ -1,4 +1,5 @@
 import argparse
+import os
 import re
 from datetime import datetime
 from typing import Any
@@ -10,6 +11,7 @@ from netmiko.exceptions import NetmikoAuthenticationException, NetmikoTimeoutExc
 from .inventory import load_inventory
 
 SWITCH_INVENTORY = load_inventory()
+MOCK_MODE = os.getenv("BFD_MOCK_MODE", "0").strip().lower() in {"1", "true", "yes", "on"}
 
 mcp = FastMCP(
     "BGP Flap Detective",
@@ -25,12 +27,50 @@ def now_iso() -> str:
     return datetime.now().isoformat()
 
 
+def _mock_command_output(device_name: str, command: str) -> str:
+    cmd = command.lower().strip()
+
+    if "show bgp ipv4 unicast summary" in cmd or "show ip bgp summary" in cmd:
+        return """
+Neighbor        V    AS MsgRcvd MsgSent TblVer InQ OutQ Up/Down  State/PfxRcd
+192.168.1.20    4 65001   1000    1200    124   0    0 1d02h     224
+192.168.1.21    4 65002    100     120    124   0    0 00:00:12  Active
+""".strip()
+
+    if cmd.startswith("show interface"):
+        return """
+Ethernet1/1 is up, line protocol is up
+  MTU 1500 bytes
+  4 input error, 132 CRC, 0 frame, 0 overrun, 0 ignored
+  3 output drop
+  9 carrier transition
+  2 interface reset
+""".strip()
+
+    if cmd.startswith("show logging"):
+        return """
+2026 Mar 23 10:12:05 spine-1 %BGP-5-ADJCHANGE: neighbor 192.168.1.21 Down BGP Notification sent
+2026 Mar 23 10:12:06 spine-1 %BGP-3-NOTIFICATION: sent to neighbor 192.168.1.21 hold time expired
+2026 Mar 23 10:12:11 spine-1 %BGP-5-ADJCHANGE: neighbor 192.168.1.21 Up
+""".strip()
+
+    if cmd.startswith("ping"):
+        if any(size in cmd for size in ["size 1450", "size 1500", "size 9000"]):
+            return "Success rate is 0 percent (0/5)"
+        return "Success rate is 100 percent (5/5)"
+
+    return f"MOCK: no sample data available for command '{command}' on {device_name}"
+
+
 def ssh_run(device_name: str, command: str) -> str:
     if device_name not in SWITCH_INVENTORY:
         return (
             f"ERROR: '{device_name}' not found in inventory. "
             f"Known devices: {list(SWITCH_INVENTORY.keys())}"
         )
+
+    if MOCK_MODE:
+        return _mock_command_output(device_name, command)
 
     params = SWITCH_INVENTORY[device_name]
     try:
@@ -159,6 +199,7 @@ def list_devices() -> dict[str, Any]:
             for name, data in SWITCH_INVENTORY.items()
         ],
         "timestamp": now_iso(),
+        "mock_mode": MOCK_MODE,
     }
 
 
@@ -175,6 +216,7 @@ def check_bgp_neighbors(device_name: str) -> dict[str, Any]:
     return {
         "device": device_name,
         "timestamp": now_iso(),
+        "mock_mode": MOCK_MODE,
         "total_neighbors": len(neighbors),
         "established_count": sum(1 for n in neighbors if n["is_established"]),
         "problem_peers": flapping,
@@ -198,6 +240,7 @@ def get_interface_errors(device_name: str, interface: str) -> dict[str, Any]:
     return {
         "device": device_name,
         "interface": interface,
+        "mock_mode": MOCK_MODE,
         **parsed,
         "timestamp": now_iso(),
     }
@@ -216,6 +259,7 @@ def check_mtu_path(source_device: str, destination_ip: str) -> dict[str, Any]:
     return {
         "source": source_device,
         "destination": destination_ip,
+        "mock_mode": MOCK_MODE,
         "test_results": results,
         **analysis,
         "timestamp": now_iso(),
@@ -256,6 +300,7 @@ def get_syslog_events(
     return {
         "device": device_name,
         "filter": filter_keyword,
+        "mock_mode": MOCK_MODE,
         "total_matching_events": len(events),
         "hold_timer_events": hold_timer_events,
         "notification_events": notification_events,
@@ -335,6 +380,7 @@ def recommend_fix(
     return {
         "device": affected_device,
         "root_cause": normalized,
+        "mock_mode": MOCK_MODE,
         "peer_ip": peer_ip,
         "interface": affected_interface,
         "commands": commands,
@@ -343,6 +389,52 @@ def recommend_fix(
             "Use maintenance window for disruptive interface actions.",
             "Capture before/after show command outputs.",
         ],
+        "timestamp": now_iso(),
+    }
+
+
+@mcp.tool
+def run_mock_investigation(
+    device_name: str = "spine-1",
+    interface: str = "Ethernet1/1",
+    peer_ip: str = "192.168.1.21",
+) -> dict[str, Any]:
+    """Run a full simulated investigation for demos without live devices."""
+    bgp = check_bgp_neighbors(device_name)
+    intf = get_interface_errors(device_name, interface)
+    mtu = check_mtu_path(device_name, peer_ip)
+    logs = get_syslog_events(device_name, filter_keyword="BGP", last_n_lines=20)
+
+    if mtu.get("mtu_problem_detected"):
+        suggested_cause = "mtu_mismatch"
+    elif intf.get("crc_errors", 0) > 100:
+        suggested_cause = "crc_errors"
+    elif bgp.get("problem_peers"):
+        suggested_cause = "hold_timer"
+    else:
+        suggested_cause = "route_policy"
+
+    recommendation = recommend_fix(
+        root_cause=suggested_cause,
+        affected_device=device_name,
+        affected_interface=interface,
+        peer_ip=peer_ip,
+    )
+
+    return {
+        "scenario": "mock_bgp_flap_demo",
+        "mock_mode_active": MOCK_MODE,
+        "device": device_name,
+        "peer_ip": peer_ip,
+        "interface": interface,
+        "suggested_root_cause": suggested_cause,
+        "steps": {
+            "bgp_neighbors": bgp,
+            "interface_errors": intf,
+            "mtu_check": mtu,
+            "syslog_events": logs,
+            "recommendation": recommendation,
+        },
         "timestamp": now_iso(),
     }
 
