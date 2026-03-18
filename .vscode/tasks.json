@@ -1,0 +1,33 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Run MCP server (stdio)",
+			"type": "shell",
+			"command": "PYTHONPATH=src ./.venv/bin/python -m bgp_flap_detective.server",
+			"group": "build",
+			"problemMatcher": []
+		},
+		{
+			"label": "Run tests",
+			"type": "shell",
+			"command": "./.venv/bin/python -m pytest -q",
+			"group": "test",
+			"problemMatcher": []
+		},
+		{
+			"label": "Demo Smoke Test",
+			"type": "shell",
+			"command": "./.venv/bin/python -m pytest -q",
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Demo Smoke Test",
+			"type": "shell",
+			"command": "./.venv/bin/python -m pytest -q",
+			"problemMatcher": [],
+			"group": "test"
+		}
+	]
+}
