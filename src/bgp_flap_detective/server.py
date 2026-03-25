@@ -128,6 +128,20 @@ def ssh_run(device_name: str, command: str) -> str:
 
 
 def parse_bgp_summary(raw: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """
+    Parse BGP neighbor summary output into structured neighbor records.
+    
+    Parses typical Cisco NX-OS "show bgp ipv4 unicast summary" output to extract
+    neighbor IP, AS number, state, and flap indicators. Identifies non-established
+    peers as potential problem indicators for further diagnosis.
+    
+    Args:
+        raw: Raw CLI output from "show bgp [ipv4 unicast] summary" command
+        
+    Returns:
+        Tuple of (all_neighbors_list, problem_peers_list) where problem_peers_list
+        contains only non-established peers requiring investigation
+    """
     neighbors: list[dict[str, Any]] = []
     flapping: list[dict[str, Any]] = []
 
@@ -142,6 +156,7 @@ def parse_bgp_summary(raw: str) -> tuple[list[dict[str, Any]], list[dict[str, An
         peer_as = parts[2] if len(parts) > 2 else "unknown"
         up_down = parts[-2] if len(parts) >= 2 else "unknown"
         state_pfx = parts[-1]
+        # A numeric state_pfx indicates established with prefix count; otherwise it's a failure state
         is_established = state_pfx.isdigit()
 
         item = {
@@ -166,7 +181,21 @@ def parse_bgp_summary(raw: str) -> tuple[list[dict[str, Any]], list[dict[str, An
 
 
 def parse_interface_output(raw: str) -> dict[str, Any]:
+    """
+    Extract interface diagnostics from "show interface" output.
+    
+    Parses physical layer counters (CRC errors, carrier transitions, resets, etc.)
+    and identifies conditions that could trigger BGP flaps. Returns structured
+    diagnostics with a flag indicating presence of problems.
+    
+    Args:
+        raw: Raw output from "show interface <name>" command
+        
+    Returns:
+        Dict with parsed counters, line protocol state, MTU, and list of detected problems
+    """
     def extract(pattern: str, default: str = "0") -> str:
+        """Helper to regex-extract a value from CLI output with default fallback."""
         match = re.search(pattern, raw, flags=re.IGNORECASE)
         return match.group(1) if match else default
 
@@ -178,6 +207,7 @@ def parse_interface_output(raw: str) -> dict[str, Any]:
     interface_resets = int(extract(r"(\d+)\s+interface reset"))
     mtu = extract(r"MTU\s+(\d+)\s+bytes", "unknown")
 
+    # Heuristic detection: flag conditions likely to cause BGP flaps
     problems: list[str] = []
     if line_protocol.lower() != "up":
         problems.append("Line protocol is not up")
