@@ -1,0 +1,5 @@
+{
+  "r1": {"host": "192.168.122.10", "device_type": "linux", "username": "root", "password": "pass", "port": 22},
+  "r2": {"host": "192.168.122.11", "device_type": "linux", "username": "root", "password": "pass", "port": 22},
+  "r3": {"host": "192.168.122.12", "device_type": "linux", "username": "root", "password": "pass", "port": 22}
+}

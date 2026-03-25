@@ -1,16 +1,3 @@
-"""
-BGP Flap Detective MCP Server Module
-
-This module implements the core diagnostic logic for identifying BGP session flap root causes.
-It provides MCP tools for SSH-based device interrogation, evidence collection, and recommendation.
-
-Key responsibilities:
-- SSH command execution and error handling via Netmiko
-- BGP summary, interface, MTU, and syslog data parsing
-- Root-cause analysis and safe remediation recommendations
-- Mock mode support for demo and testing without live hardware
-"""
-
 import argparse
 import os
 import re
@@ -37,24 +24,10 @@ mcp = FastMCP(
 
 
 def now_iso() -> str:
-    """Return current UTC time in ISO 8601 format for timestamp tracking."""
     return datetime.now().isoformat()
 
 
 def _mock_command_output(device_name: str, command: str) -> str:
-    """
-    Generate synthetic CLI output for demo and testing without live devices.
-    
-    This function simulates realistic output from Cisco NX-OS and similar platforms
-    for common diagnostic commands. Used when BFD_MOCK_MODE environment variable is set.
-    
-    Args:
-        device_name: Logical device name from inventory (e.g., "spine-1")
-        command: Full CLI command string to simulate
-        
-    Returns:
-        Synthetic CLI output matching the command, or error message if command unknown.
-    """
     cmd = command.lower().strip()
 
     if "show bgp ipv4 unicast summary" in cmd or "show ip bgp summary" in cmd:
@@ -90,22 +63,6 @@ Ethernet1/1 is up, line protocol is up
 
 
 def ssh_run(device_name: str, command: str) -> str:
-    """
-    Execute a CLI command on a remote device via SSH using Netmiko.
-    
-    This is the core mechanism for device interrogation. In production, this connects
-    to real switches; in mock mode, it returns synthetic data for testing.
-    
-    Args:
-        device_name: Inventory key (e.g., "spine-1"), must exist in SWITCH_INVENTORY
-        command: Full CLI command string to send to the device
-        
-    Returns:
-        CLI command output as string, or error message prefixed with "ERROR:" if connection fails.
-        
-    Raises:
-        None (all exceptions are caught and returned as error strings for graceful handling)
-    """
     if device_name not in SWITCH_INVENTORY:
         return (
             f"ERROR: '{device_name}' not found in inventory. "

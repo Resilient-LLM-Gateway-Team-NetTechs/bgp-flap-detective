@@ -90,22 +90,6 @@ Ethernet1/1 is up, line protocol is up
 
 
 def ssh_run(device_name: str, command: str) -> str:
-    """
-    Execute a CLI command on a remote device via SSH using Netmiko.
-    
-    This is the core mechanism for device interrogation. In production, this connects
-    to real switches; in mock mode, it returns synthetic data for testing.
-    
-    Args:
-        device_name: Inventory key (e.g., "spine-1"), must exist in SWITCH_INVENTORY
-        command: Full CLI command string to send to the device
-        
-    Returns:
-        CLI command output as string, or error message prefixed with "ERROR:" if connection fails.
-        
-    Raises:
-        None (all exceptions are caught and returned as error strings for graceful handling)
-    """
     if device_name not in SWITCH_INVENTORY:
         return (
             f"ERROR: '{device_name}' not found in inventory. "
