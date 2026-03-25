@@ -26,6 +26,7 @@ from .inventory import load_inventory
 SWITCH_INVENTORY = load_inventory()
 MOCK_MODE = os.getenv("BFD_MOCK_MODE", "0").strip().lower() in {"1", "true", "yes", "on"}
 
+# Initialize the MCP server with diagnostic session instructions for the attached LLM client
 mcp = FastMCP(
     "BGP Flap Detective",
     instructions=(
@@ -232,6 +233,19 @@ def parse_interface_output(raw: str) -> dict[str, Any]:
 
 
 def analyze_mtu_results(results: dict[int, bool]) -> dict[str, Any]:
+    """
+    Synthesize MTU ping results to identify path MTU constraint.
+    
+    Tests progressive packet sizes (typically 576, 1400, 1450, 1500, 9000) with
+    DF bit set to discover the effective MTU on the path. MTU mismatch is a common
+    root cause of BGP flaps, especially in overlay networks.
+    
+    Args:
+        results: Dict mapping packet size (int) to success boolean
+        
+    Returns:
+        Dict with effective_path_mtu, fail points, diagnosis message, and mtu_problem_detected flag
+    """
     effective_mtu = 0
     failed_at: list[int] = []
 
@@ -241,6 +255,7 @@ def analyze_mtu_results(results: dict[int, bool]) -> dict[str, Any]:
         else:
             failed_at.append(size)
 
+    # Diagnosis: if largest passing size is less than standard 1500, we have an MTU problem
     mtu_problem = len(failed_at) > 0 and effective_mtu < 1500
     if mtu_problem:
         diagnosis = (
