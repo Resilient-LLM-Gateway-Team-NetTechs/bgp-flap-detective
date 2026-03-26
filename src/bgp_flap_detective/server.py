@@ -275,6 +275,16 @@ def analyze_mtu_results(results: dict[int, bool]) -> dict[str, Any]:
 
 @mcp.tool
 def list_devices() -> dict[str, Any]:
+    """
+    MCP Tool: List all configured network devices from inventory.
+    
+    This is the first tool to call in a troubleshooting session to confirm
+    which devices are reachable and available for diagnostic queries.
+    
+    Returns:
+        Dict containing device count, list of device objects (name, host, type, port),
+        current timestamp, and mock mode indicator
+    """
     return {
         "count": len(SWITCH_INVENTORY),
         "devices": [
@@ -293,6 +303,18 @@ def list_devices() -> dict[str, Any]:
 
 @mcp.tool
 def check_bgp_neighbors(device_name: str) -> dict[str, Any]:
+    """
+    MCP Tool: Query BGP neighbor summary for established and problematic sessions.
+    
+    Runs vendor-specific BGP summary command and parses neighbor states, ASNs,
+    and session uptime. Identifies non-established neighbors for further investigation.
+    
+    Args:
+        device_name: Device identifier from inventory (e.g., "spine-1")
+        
+    Returns:
+        Dict with neighbor list, problem peers, counts, raw output, and timestamp
+    """
     device_type = SWITCH_INVENTORY.get(device_name, {}).get("device_type", "cisco_nxos")
     cmd = "show ip bgp summary" if "arista" in device_type else "show bgp ipv4 unicast summary"
     raw = ssh_run(device_name, cmd)
