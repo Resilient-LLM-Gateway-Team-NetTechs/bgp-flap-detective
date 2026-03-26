@@ -337,6 +337,19 @@ def check_bgp_neighbors(device_name: str) -> dict[str, Any]:
 
 @mcp.tool
 def get_interface_errors(device_name: str, interface: str) -> dict[str, Any]:
+    """
+    MCP Tool: Retrieve physical layer error counters for a specific interface.
+    
+    Extracts line protocol state, MTU, CRC errors, carrier transitions, and other
+    physical layer diagnostics. High error rates are common BGP flap triggers.
+    
+    Args:
+        device_name: Device identifier from inventory
+        interface: Interface name (e.g., "Ethernet1/1", "Gi0/0")
+        
+    Returns:
+        Dict with line protocol, MTU, error counters, and problem list
+    """
     raw = ssh_run(device_name, f"show interface {interface}")
     if raw.startswith("ERROR"):
         return {
@@ -358,6 +371,20 @@ def get_interface_errors(device_name: str, interface: str) -> dict[str, Any]:
 
 @mcp.tool
 def check_mtu_path(source_device: str, destination_ip: str) -> dict[str, Any]:
+    """
+    MCP Tool: Discover effective path MTU using progressive ping tests with DF bit.
+    
+    Tests a range of packet sizes (576 to 9000 bytes) with the DF bit set to identify
+    the largest payload size that can traverse the path. MTU mismatches cause TCP/BGP
+    connection failures.
+    
+    Args:
+        source_device: Device to run ping tests from
+        destination_ip: Target IP address for MTU path discovery
+        
+    Returns:
+        Dict with test results per size, effective MTU, failure points, and diagnosis
+    """
     results: dict[int, bool] = {}
     for size in [576, 1400, 1450, 1500, 9000]:
         cmd = f"ping {destination_ip} size {size} df-bit"
@@ -382,6 +409,21 @@ def get_syslog_events(
     filter_keyword: str = "BGP",
     last_n_lines: int = 50,
 ) -> dict[str, Any]:
+    """
+    MCP Tool: Retrieve and correlate syslog events with BGP flap symptoms.
+    
+    Collects recent logs and filters for BGP-related keywords, then classifies events
+    into categories (hold timer, notifications, resets) to identify timing correlations
+    with observed flaps.
+    
+    Args:
+        device_name: Device identifier from inventory
+        filter_keyword: Syslog keyword filter (default "BGP")
+        last_n_lines: Number of recent lines to retrieve (default 50)
+        
+    Returns:
+        Dict with categorized events, analysis comments, and raw output
+    """
     cmd = f"show logging last {max(last_n_lines, 10) * 3}"
     raw = ssh_run(device_name, cmd)
 
