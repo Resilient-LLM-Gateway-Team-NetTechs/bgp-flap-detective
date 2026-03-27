@@ -470,6 +470,30 @@ def recommend_fix(
     affected_interface: str | None = None,
     peer_ip: str | None = None,
 ) -> dict[str, Any]:
+    """
+    MCP Tool: Generate safe, vendor-agnostic remediation command sequences.
+    
+    Maps diagnosis root causes to command suggestions. Output is text-only recommendations;
+    no commands are auto-executed. Includes safety notes for operational teams.
+    
+    Supported root causes:
+    - mtu_mismatch: Interface MTU configuration
+    - hold_timer: BGP timer tuning
+    - interface_flap: Physical layer issues (cable/optics)
+    - crc_errors: Physical layer quality
+    - route_policy: BGP policy validation
+    - authentication: BGP password/auth
+    - recursive_routing: BGP path loop prevention
+    
+    Args:
+        root_cause: Key identifying the diagnosis (see supported list above)
+        affected_device: Device where the issue was detected
+        affected_interface: Interface name if issue is interface-specific
+        peer_ip: BGP peer IP if issue is neighbor-specific
+        
+    Returns:
+        Dict with remediation steps, safety notes, and human-readable formatting
+    """
     normalized = root_cause.strip().lower()
     iface = affected_interface or "<interface>"
     peer = peer_ip or "<peer_ip>"
