@@ -575,7 +575,21 @@ def run_mock_investigation(
     interface: str = "Ethernet1/1",
     peer_ip: str = "192.168.1.21",
 ) -> dict[str, Any]:
-    """Run a full simulated investigation for demos without live devices."""
+    """
+    MCP Tool: Execute a complete simulated investigation bundle for demos.
+    
+    Runs all diagnostic tools in sequence using mock CLI output, synthesizes
+    a suggested root cause based on findings, and returns full recommendation.
+    Useful for team demos and testing without live lab access.
+    
+    Args:
+        device_name: Device to simulate investigation on
+        interface: Interface to include in diagnostics
+        peer_ip: BGP peer IP to test MTU path and recommend fixes for
+        
+    Returns:
+        Dict with full investigation steps and final recommendation
+    """
     bgp = check_bgp_neighbors(device_name)
     intf = get_interface_errors(device_name, interface)
     mtu = check_mtu_path(device_name, peer_ip)
@@ -616,6 +630,13 @@ def run_mock_investigation(
 
 
 def main() -> None:
+    """
+    Entry point: Parse arguments and launch MCP server in configured mode.
+    
+    Supports two transport modes:
+    - stdio (default): For local MCP client connections
+    - http: For team testing on network interface
+    """
     parser = argparse.ArgumentParser(description="Run the BGP Flap Detective MCP server")
     parser.add_argument("--http", action="store_true", help="Run in HTTP transport mode")
     parser.add_argument("--host", default="0.0.0.0", help="Host for HTTP mode")
