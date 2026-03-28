@@ -2,6 +2,31 @@
 
 BGP Flap Detective is an MCP server that helps diagnose BGP session flapping in data center spine-leaf networks.
 
+## The Problem
+
+BGP session flaps are disruptive and costly in production data centers. A single flap can:
+- Drop traffic for seconds to minutes
+- Trigger cascading route reconvergence
+- Impact entire availability zones if not caught quickly
+
+Troubleshooting flaps is historically manual and slow:
+- Engineers must SSH to multiple devices
+- Correlate outputs from BGP, interfaces, logs, and traceroute
+- Distinguish among root causes: MTU mismatch, physical layer issues, timer mismatches, policy errors, authentication problems
+
+Root causes vary significantly, and incorrect diagnosis wastes time and risks dangerous config changes.
+
+## The Solution
+
+BGP Flap Detective structures this diagnosis into a repeatable workflow:
+1. **check_bgp_neighbors** — Identify which sessions are non-established
+2. **get_interface_errors** — Check physical layer health on the affected interface
+3. **check_mtu_path** — Test path MTU with progressive ping sizes
+4. **get_syslog_events** — Correlate event timing with BGP notifications and resets
+5. **recommend_fix** — Map findings to safe, validated remediation commands
+
+All evidence collection is read-only; recommendations are text-only with safety notes. No config changes are auto-executed.
+
 ## What this prototype includes
 
 - Working MCP server with diagnostic tools
